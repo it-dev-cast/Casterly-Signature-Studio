@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/*
+ * Casterly green - the only theme (NEXUS One "Casterly Light" palette).
+ * primary-600 #678b27, secondary-100 #eef4e1, background #f9faf9, border #e2e5dc, text #1d301d.
+ */
+@theme {
+  --font-sans: "Poppins", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* Casterly green: buttons, active navigation, focus, links */
+  --color-brand-50: #f5f8ec;
+  --color-brand-100: #eef4e1;
+  --color-brand-200: #dbe7c2;
+  --color-brand-300: #bfd497;
+  --color-brand-400: #9cba64;
+  --color-brand-500: #7fa13c;
+  --color-brand-600: #678b27;
+  --color-brand-700: #516e1f;
+  --color-brand-800: #41571b;
+  --color-brand-900: #1d301d;
+
+  /* Casterly lime - highlights only, never for text on white */
+  --color-lime-accent: #c3d05b;
+  --color-lime-soft: #f4f7df;
+
+  /* Green-tinted neutrals (replace Tailwind's slate everywhere) */
+  --color-slate-50: #f9faf9;
+  --color-slate-100: #f1f3ee;
+  --color-slate-200: #e2e5dc;
+  --color-slate-300: #cdd2c5;
+  --color-slate-400: #9aa393;
+  --color-slate-500: #6b7566;
+  --color-slate-600: #4f5a4b;
+  --color-slate-700: #3a4637;
+  --color-slate-800: #1d301d;
+  --color-slate-900: #142214;
+
+  --color-surface: #ffffff; /* cards, panels, inputs, modals */
+  --color-brand-hover: #516e1f; /* primary button hover */
+  --color-danger-hover: #b91c1c; /* danger button hover */
+  --color-code: #142214; /* HTML code viewer */
+  --color-code-fg: #e2e5dc;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-slate-50 text-slate-800;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+}

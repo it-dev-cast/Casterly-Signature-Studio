@@ -1,0 +1,47 @@
+# PostgreSQL + FastAPI + React (nginx).
+#   SECRET_KEY=$(python -c "import secrets;print(secrets.token_urlsafe(48))") docker compose up --build
+# Then seed once:
+#   docker compose exec backend python -m app.seed
+# App: http://localhost:5173   API docs: http://localhost:8000/api/docs
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: signature
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-signature}
+      POSTGRES_DB: signature_studio
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U signature -d signature_studio"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://signature:${POSTGRES_PASSWORD:-signature}@db:5432/signature_studio
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY before running docker compose}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  pgdata:
+  uploads:
