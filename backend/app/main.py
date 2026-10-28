@@ -17,6 +17,7 @@ from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.database.database import SessionLocal
 from app.services import nexus_sync
+from app.utils.static_files import RevalidatingStaticFiles
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -73,7 +74,7 @@ def create_app() -> FastAPI:
 
     upload_dir = Path(config.upload_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
-    app.mount("/uploads", StaticFiles(directory=upload_dir), name="uploads")
+    app.mount("/uploads", RevalidatingStaticFiles(directory=upload_dir), name="uploads")
     app.mount("/static", StaticFiles(directory=branding.STATIC_DIR), name="static")
     return app
 

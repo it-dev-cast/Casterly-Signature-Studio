@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.database.database import get_db
 from app.public_app import app as public_app
-from tests.conftest import create_banner, publish
+from tests.conftest import banner_payload, create_banner, publish
 
 NS = {"o": "http://schemas.microsoft.com/office/appforoffice/1.1"}
 VO = "{http://schemas.microsoft.com/office/mailappversionoverrides/1.1}"
@@ -105,6 +105,56 @@ def test_signature_by_email_is_fresh_on_every_call(client, admin_headers, templa
     a = create_banner(client, admin_headers, "Launch")
     publish(client, admin_headers, a["id"])
     assert client.get("/api/outlook/signature?email=john@company.com").status_code == 200
+
+
+def _addin_banner_urls(client) -> tuple[str, str]:
+    html = client.get("/api/outlook/signature?email=john@company.com").text
+    image = re.search(r'<img src="(https://sig\.test/banner/current\.png[^"]*)"', html)
+    link = re.search(r'<a href="(https://sig\.test/banner/current[^".]*)"', html)
+    assert image and link, html
+    return image.group(1).replace("&amp;", "&"), link.group(1).replace("&amp;", "&")
+
+
+def test_addin_banner_url_changes_with_every_banner_change(client, admin_headers, template, john):
+    # Outlook caches images by URL, so each banner change must give the add-in a new URL.
+    none_image, none_link = _addin_banner_urls(client)
+    assert none_image == "https://sig.test/banner/current.png?v=none"
+    assert none_link == "https://sig.test/banner/current?v=none"
+
+    a = create_banner(client, admin_headers, "Launch")
+    assert publish(client, admin_headers, a["id"]).status_code == 200
+    a_image, a_link = _addin_banner_urls(client)
+    assert a_image.startswith(f"https://sig.test/banner/current.png?v={a['id']}-")
+    assert a_link.startswith(f"https://sig.test/banner/current?v={a['id']}-")
+    assert _addin_banner_urls(client) == (a_image, a_link)  # stable while nothing changes
+
+    b = create_banner(client, admin_headers, "Summer")
+    assert publish(client, admin_headers, b["id"]).status_code == 200
+    b_image, _ = _addin_banner_urls(client)
+    assert b_image.startswith(f"https://sig.test/banner/current.png?v={b['id']}-")
+
+    # Editing the published banner (new image, same banner) also changes the URL.
+    edit = client.put(f"/api/banners/{b['id']}", headers=admin_headers,
+                      json=banner_payload("Summer", image_url="/uploads/banners/summer-v2.png"))
+    assert edit.status_code == 200, edit.text
+    edited_image, _ = _addin_banner_urls(client)
+    assert edited_image != b_image and edited_image.startswith(f"https://sig.test/banner/current.png?v={b['id']}-")
+
+    assert client.post(f"/api/banners/{b['id']}/unpublish", headers=admin_headers).status_code == 200
+    assert _addin_banner_urls(client)[0] == "https://sig.test/banner/current.png?v=none"
+
+    # The version is only for caches: every version serves the current banner.
+    for url in (a_image, b_image, edited_image):
+        assert client.get(url.removeprefix("https://sig.test")).status_code == 200
+
+
+def test_saved_signatures_keep_the_plain_live_banner_url(client, admin_headers, template, john):
+    # The installer and setup page save the signature once, so they can't use a versioned URL.
+    a = create_banner(client, admin_headers, "Launch")
+    publish(client, admin_headers, a["id"])
+    data = client.get(f"/api/signatures/{john.id}", headers=admin_headers).json()["data"]
+    assert 'src="https://sig.test/banner/current.png"' in data["live_html"]
+    assert "?v=" not in data["live_html"]
 
 
 def test_signature_by_email_unknown_or_inactive(client, db, template, john):

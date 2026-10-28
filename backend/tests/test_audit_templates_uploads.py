@@ -103,6 +103,10 @@ def test_upload_image_and_serve(client, admin_headers):
     assert data["url"] == "https://sig.test" + data["path"]
     served = client.get(data["path"])
     assert served.status_code == 200 and served.content == _png()
+    # Clients must re-check uploaded images, so a replaced photo or banner shows up quickly.
+    assert served.headers["cache-control"] == "no-cache" and served.headers["etag"]
+    again = client.get(data["path"], headers={"If-None-Match": served.headers["etag"]})
+    assert again.status_code == 304 and again.headers["cache-control"] == "no-cache"
 
 
 def test_upload_rejects_non_images(client, admin_headers):

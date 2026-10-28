@@ -19,6 +19,7 @@ from app import branding
 from app.api import installer, live_banner, outlook_addin, setup
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
+from app.utils.static_files import RevalidatingStaticFiles
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -46,7 +47,7 @@ def create_public_app() -> FastAPI:
 
     upload_dir = Path(config.upload_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
-    app.mount("/uploads", StaticFiles(directory=upload_dir), name="uploads")
+    app.mount("/uploads", RevalidatingStaticFiles(directory=upload_dir), name="uploads")
     app.mount("/static", StaticFiles(directory=branding.STATIC_DIR), name="static")
     return app
 

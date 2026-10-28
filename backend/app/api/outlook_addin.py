@@ -88,7 +88,10 @@ def outlook_signature(email: str = Query(..., min_length=3, max_length=255), db:
     if employee is None or not employee.is_active:
         raise AppError(404, "EMPLOYEE_NOT_FOUND", "No active Signature Studio employee uses this email address.")
     # Called on every new email, so it is deliberately not written to the audit log.
-    result = signature_service.generate_employee_signature(db, employee.id, live_banner=True)
+    # versioned_banner: the banner URL changes with each new or edited banner, so Outlook's image
+    # cache can't keep showing the old one.
+    result = signature_service.generate_employee_signature(db, employee.id, live_banner=True,
+                                                           versioned_banner=True)
     mode = "replace" if settings_service.get_app_settings(db).addin_replace_outlook_signature else "keep"
     return HTMLResponse(result.html, headers={"Cache-Control": "no-store", MODE_HEADER: mode})
 
