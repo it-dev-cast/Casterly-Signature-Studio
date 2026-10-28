@@ -1,4 +1,4 @@
-"""Casterly Outlook add-in (new Outlook, Outlook on the web, classic Outlook).
+"""Casterly Outlook add-in (new Outlook, Outlook on the web, classic Outlook, Outlook on iOS/Android).
 
 Pasted signatures are a snapshot: Outlook stores its own copy, so banner changes never
 reach them. This add-in instead runs on every "new email / reply / forward" and inserts a
@@ -37,19 +37,21 @@ from app.utils.urls import is_temporary_tunnel, outlook_url_problem
 logger = logging.getLogger("signature_studio.outlook")
 
 ADDIN_ID = "3c2fd8a4-20c3-4340-98ad-515e118a4626"  # fixed, so re-adding replaces the old copy
-ADDIN_VERSION_BASE = "1.1"
+ADDIN_VERSION_BASE = "1.2"  # 1.2: Outlook on iOS/Android (MobileFormFactor)
 
 
 def addin_version(base: str) -> str:
-    """Version changes whenever the manifest changes: its server address or its content.
+    """Version changes whenever the add-in changes: its server address, manifest or runtime files.
 
     Outlook caches add-in manifests by id + version; if the address changes (e.g. a new
     public URL) but the version doesn't, Outlook keeps loading files from the old address.
-    The same goes for a changed button or event, so the whole manifest is hashed.
+    The same goes for a changed button or event, and Outlook also keeps running cached
+    runtime files, so the whole manifest plus launchevent.js and commands.html are hashed.
     """
     import zlib
 
-    return f"{ADDIN_VERSION_BASE}.{zlib.crc32(_manifest_template(base).encode()) % 60000}.0"
+    content = _manifest_template(base) + LAUNCH_EVENT_JS + COMMANDS_HTML
+    return f"{ADDIN_VERSION_BASE}.{zlib.crc32(content.encode()) % 60000}.0"
 
 router = APIRouter(tags=["outlook add-in"])
 admin_router = APIRouter(tags=["outlook add-in"])
@@ -187,8 +189,11 @@ def _manifest_template(base: str) -> str:
   <DisableEntityHighlighting>false</DisableEntityHighlighting>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
+      <!-- 1.5, not 1.10: Outlook on iOS/Android only supports up to 1.5 and ignores this whole
+           section otherwise. Its launch events still get setSignatureAsync. Current desktop and
+           web Outlook support 1.10+, so they behave as before. -->
       <Requirements>
-        <bt:Sets DefaultMinVersion="1.10">
+        <bt:Sets DefaultMinVersion="1.5">
           <bt:Set Name="Mailbox"/>
         </bt:Sets>
       </Requirements>
@@ -232,6 +237,15 @@ def _manifest_template(base: str) -> str:
               </OfficeTab>
             </ExtensionPoint>
           </DesktopFormFactor>
+          <!-- Outlook on iOS/Android: automatic only (no compose button), via commands.html -->
+          <MobileFormFactor>
+            <ExtensionPoint xsi:type="LaunchEvent">
+              <LaunchEvents>
+                <LaunchEvent Type="OnNewMessageCompose" FunctionName="onNewMessageComposeHandler"/>
+              </LaunchEvents>
+              <SourceLocation resid="WebViewRuntime.Url"/>
+            </ExtensionPoint>
+          </MobileFormFactor>
         </Host>
       </Hosts>
       <Resources>
@@ -295,12 +309,20 @@ function report(source, status, outlookDefault, error, then) {
 }
 
 // Is the user's own Outlook default signature switched on? true / false / null (unknown).
+// Outlook on iOS/Android doesn't support this check: there it is unknown, so the Casterly
+// signature replaces the phone's own one.
 function outlookDefaultEnabled(callback) {
   var item = Office.context.mailbox.item;
   if (!item.isClientSignatureEnabledAsync) return callback(null);
-  item.isClientSignatureEnabledAsync(function (r) {
-    callback(r.status === "succeeded" ? r.value === true : null);
-  });
+  var answered = false;
+  var answer = function (value) { if (!answered) { answered = true; callback(value); } };
+  try {
+    item.isClientSignatureEnabledAsync(function (r) {
+      answer(r.status === "succeeded" ? r.value === true : null);
+    });
+  } catch (e) {
+    answer(null);  // listed but not supported on this client
+  }
 }
 
 // Always fetched fresh (no cache), so the latest details, banner and logo are used.

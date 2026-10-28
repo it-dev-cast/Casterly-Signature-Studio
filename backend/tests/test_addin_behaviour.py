@@ -25,7 +25,7 @@ def _sig(client, email):
             "mode": r.headers.get("x-casterly-signature-mode")}
 
 
-def run(client, user, composes=("auto",), outlook_default=False, emails=None):
+def run(client, user, composes=("auto",), outlook_default=False, emails=None, mobile=None):
     emails = emails or [user["email"]]
     cfg = {
         "script": client.get("/outlook-addin/launchevent.js").text,
@@ -33,6 +33,7 @@ def run(client, user, composes=("auto",), outlook_default=False, emails=None):
         "outlookDefault": outlook_default,
         "signatures": {e: _sig(client, e) for e in emails},
         "composes": list(composes),
+        "mobile": mobile,
     }
     out = subprocess.run(["node", str(HARNESS)], input=json.dumps(cfg), capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
@@ -100,6 +101,29 @@ def test_keep_mode_respects_the_users_own_default(client, admin_headers, templat
     [button] = run(client, {"email": "rajatha18@outlook.com", "name": "Rajatha"}, composes=["button"], outlook_default=True)
     assert "Rajatha P" in button["signature"]  # the button always inserts it
     assert button["notifications"] == ["Casterly signature added for Rajatha."]
+
+
+@pytest.mark.parametrize("platform", ["Android", "iOS"])
+@pytest.mark.parametrize("check", ["missing", "throws"])
+@pytest.mark.parametrize("replace", [False, True])
+def test_mobile_replaces_the_phones_own_signature(client, admin_headers, template, rajatha, platform, check, replace):
+    # Outlook on iOS/Android can't say whether the user has their own default, so in both modes
+    # the Casterly signature replaces the phone's one, and the event always completes.
+    client.put("/api/settings", json={**SETTINGS, "addin_replace_outlook_signature": replace}, headers=admin_headers)
+    [res] = run(client, {"email": "rajatha18@outlook.com", "name": "Rajatha"},
+                mobile={"platform": platform, "clientSignatureCheck": check})
+    assert "PHONE OWN SIGNATURE" not in res["signature"]
+    assert res["signature"].count("Rajatha P") == 1
+    assert res["disabledClientSignature"] is False and res["notifications"] == []
+    report = res["reports"][0]
+    assert report["status"] == "inserted" and report["outlook_default"] == ""
+    assert report["source"] == "auto" and report["host"].startswith(platform)
+
+
+def test_mobile_repeated_emails_never_duplicate(client, template, rajatha):
+    results = run(client, {"email": "rajatha18@outlook.com", "name": "Rajatha"}, composes=["auto"] * 3,
+                  mobile={"platform": "Android", "clientSignatureCheck": "throws"})
+    assert all(r["signature"].count("Rajatha P") == 1 for r in results)
 
 
 def test_unknown_outlook_user_gets_no_signature_and_an_error_report(client, template):

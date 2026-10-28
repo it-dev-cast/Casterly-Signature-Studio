@@ -1,7 +1,10 @@
 // Runs the real Outlook add-in script (launchevent.js) against a stand-in Office.js, so its
 // behaviour can be tested without Outlook. Input (JSON on stdin):
 //   { script, user: {email, name}, outlookDefault: true|false|null,
-//     signatures: { "<email>": {status, html, mode} }, composes: ["auto"|"button", ...] }
+//     signatures: { "<email>": {status, html, mode} }, composes: ["auto"|"button", ...],
+//     mobile: optional { platform: "Android"|"iOS", clientSignatureCheck: "missing"|"throws" } }
+//   With `mobile`, the compose window behaves like Outlook on iOS/Android: the phone's own
+//   signature is already in the body and isClientSignatureEnabledAsync isn't supported.
 // Output (JSON on stdout): one result per compose window.
 const vm = require("vm");
 
@@ -18,8 +21,10 @@ function compose(cfg, kind) {
   return new Promise((resolve) => {
     // A fresh compose window. If the user's own Outlook signature is enabled, Outlook has
     // already put it in the body - as it does in real Outlook.
+    const mobile = cfg.mobile || null;
     const state = {
-      signature: cfg.outlookDefault === true ? "<p>OUTLOOK OWN SIGNATURE</p>" : null,
+      signature: mobile ? "<p>PHONE OWN SIGNATURE</p>"
+        : cfg.outlookDefault === true ? "<p>OUTLOOK OWN SIGNATURE</p>" : null,
       disabledClientSignature: false,
       notifications: [],
       reports: [],
@@ -42,10 +47,14 @@ function compose(cfg, kind) {
       },
       notificationMessages: { replaceAsync: (key, msg) => state.notifications.push(msg.message) },
     };
+    if (mobile && mobile.clientSignatureCheck === "missing") delete item.isClientSignatureEnabledAsync;
+    if (mobile && mobile.clientSignatureCheck === "throws") {
+      item.isClientSignatureEnabledAsync = () => { throw new Error("API not supported"); };
+    }
     const Office = {
       context: {
         mailbox: { userProfile: { emailAddress: cfg.user.email, displayName: cfg.user.name }, item },
-        diagnostics: { platform: "OfficeOnline", version: "test" },
+        diagnostics: { platform: mobile ? mobile.platform : "OfficeOnline", version: "test" },
       },
       CoercionType: { Html: "html" },
       MailboxEnums: { ItemNotificationMessageType: { InformationalMessage: "info" } },

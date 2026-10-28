@@ -53,8 +53,9 @@ def test_manifest_meets_outlook_requirements(client):
     outer = "{http://schemas.microsoft.com/office/mailappversionoverrides}VersionOverrides"
     overrides = root.find(f"{outer}/{VO}VersionOverrides")
     assert overrides.get(XSI_TYPE) == "VersionOverridesV1_1"
-    # setSignatureAsync and LaunchEvent need Mailbox 1.10.
-    assert overrides.find(f"{VO}Requirements/{BT}Sets").get("DefaultMinVersion") == "1.10"
+    # 1.5: Outlook on iOS/Android ignores the whole section above that. Its launch events still
+    # get setSignatureAsync, and desktop/web Outlook with LaunchEvent support 1.10+ anyway.
+    assert overrides.find(f"{VO}Requirements/{BT}Sets").get("DefaultMinVersion") == "1.5"
     desktop = overrides.find(f"{VO}Hosts/{VO}Host/{VO}DesktopFormFactor")
     points = {p.get(XSI_TYPE): p for p in desktop.findall(f"{VO}ExtensionPoint")}
     event = points["LaunchEvent"].find(f"{VO}LaunchEvents/{VO}LaunchEvent")
@@ -69,6 +70,45 @@ def test_manifest_meets_outlook_requirements(client):
     runtime = overrides.find(f"{VO}Hosts/{VO}Host/{VO}Runtimes/{VO}Runtime")
     assert runtime.get("resid") == "WebViewRuntime.Url"
     assert runtime.find(f"{VO}Override").get("type") == "javascript"
+
+
+def _host(client):
+    root = ET.fromstring(client.get("/outlook-addin/manifest.xml").content)
+    outer = "{http://schemas.microsoft.com/office/mailappversionoverrides}VersionOverrides"
+    overrides = root.find(f"{outer}/{VO}VersionOverrides")
+    return overrides, overrides.find(f"{VO}Hosts/{VO}Host")
+
+
+def test_manifest_mobile_adds_the_signature_on_new_emails(client):
+    overrides, host = _host(client)
+    [mobile] = host.findall(f"{VO}MobileFormFactor")
+    [point] = mobile.findall(f"{VO}ExtensionPoint")  # automatic only: no compose button on mobile
+    assert point.get(XSI_TYPE) == "LaunchEvent"
+    [event] = point.findall(f"{VO}LaunchEvents/{VO}LaunchEvent")
+    assert (event.get("Type"), event.get("FunctionName")) == ("OnNewMessageCompose", "onNewMessageComposeHandler")
+    # Mobile runs the HTML runtime page, which loads launchevent.js.
+    assert point.find(f"{VO}SourceLocation").get("resid") == "WebViewRuntime.Url"
+    urls = {u.get("id"): u.get("DefaultValue") for u in overrides.iter(f"{BT}Url")}
+    assert urls["WebViewRuntime.Url"] == "https://sig.test/outlook-addin/commands.html"
+    assert "/outlook-addin/launchevent.js" in client.get("/outlook-addin/commands.html").text
+
+
+def test_manifest_desktop_part_is_unchanged_by_mobile_support(client):
+    _, host = _host(client)
+    desktop = host.find(f"{VO}DesktopFormFactor")
+    assert desktop.find(f"{VO}FunctionFile").get("resid") == "WebViewRuntime.Url"
+    points = [(p.get(XSI_TYPE), p) for p in desktop.findall(f"{VO}ExtensionPoint")]
+    assert [t for t, _ in points] == ["LaunchEvent", "MessageComposeCommandSurface"]
+    launch = points[0][1]
+    assert [(e.get("Type"), e.get("FunctionName")) for e in launch.iter(f"{VO}LaunchEvent")] == [
+        ("OnNewMessageCompose", "onNewMessageComposeHandler")]
+    assert launch.find(f"{VO}SourceLocation").get("resid") == "WebViewRuntime.Url"
+    [button] = points[1][1].iter(f"{VO}Control")
+    assert button.get("id") == "casterlyInsertSignature"
+    assert button.find(f"{VO}Action/{VO}FunctionName").text == "insertCasterlySignature"
+    runtime = host.find(f"{VO}Runtimes/{VO}Runtime")
+    assert runtime.get("resid") == "WebViewRuntime.Url"
+    assert runtime.find(f"{VO}Override").get("resid") == "JSRuntime.Url"
 
 
 def test_manifest_downloads_as_a_file_for_add_from_file(client):
@@ -215,6 +255,21 @@ def test_manifest_version_changes_with_the_manifest_content(monkeypatch):
     monkeypatch.setattr(outlook_addin, "_manifest_template", lambda base: template(base).replace(
         "Insert Casterly signature", "Insert signature"))
     assert outlook_addin.addin_version("https://one.example") != before
+
+
+@pytest.mark.parametrize("name", ["LAUNCH_EVENT_JS", "COMMANDS_HTML"])
+def test_manifest_version_changes_with_the_runtime_files(monkeypatch, name):
+    # Outlook keeps running cached runtime files until the version changes.
+    from app.api import outlook_addin
+
+    before = outlook_addin.addin_version("https://one.example")
+    monkeypatch.setattr(outlook_addin, name, getattr(outlook_addin, name) + "\n// changed\n")
+    assert outlook_addin.addin_version("https://one.example") != before
+
+
+def test_manifest_version_is_1_2_for_mobile_support(client):
+    root = ET.fromstring(client.get("/outlook-addin/manifest.xml").content)
+    assert root.find("o:Version", NS).text.startswith("1.2.")
 
 
 def test_public_url_checks():

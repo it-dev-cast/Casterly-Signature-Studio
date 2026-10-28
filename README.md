@@ -392,8 +392,16 @@ recipients.
 
 ## Outlook add-in and signature settings
 
-The add-in (**new Outlook / Outlook on the web / classic Outlook**) inserts a freshly generated signature
-into each new email, reply and forward. It **never changes the user's Outlook signature settings**.
+The add-in (**new Outlook / Outlook on the web / classic Outlook / Outlook on iOS and Android**) inserts a
+freshly generated signature into each new email, reply and forward. It **never changes the user's Outlook
+signature settings**.
+
+**Outlook on iOS and Android** (version 4.2352.0 or later, Microsoft 365 work accounts) runs the same
+automatic insert through the manifest's `MobileFormFactor`. There is no compose button on mobile, and it
+doesn't run when an existing draft is opened or for mail started from the iOS **Share** menu. Mobile can't
+report whether the user has their own default signature, so the Casterly signature always replaces the
+phone's own one, whatever the setting below. The add-in reaches phones after it is deployed for the user's
+Microsoft 365 account (Integrated apps, or **Add from File** in Outlook on the web); restart the Outlook app afterwards.
 
 - It does **not** call `disableClientSignatureAsync`. In Outlook on the web and new Outlook that call disables
   the user's signature option for new mail and replies, and in classic Outlook/Mac it sets both defaults to
