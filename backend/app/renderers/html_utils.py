@@ -8,6 +8,18 @@ TABLE_ATTRS = 'role="presentation" cellpadding="0" cellspacing="0" border="0"'
 EXACT = "mso-line-height-rule:exactly;"
 
 
+def image_cell(height: int) -> str:
+    """Inline style for a table cell holding one image `height` px tall.
+
+    Word (classic Outlook) sets an image on the text baseline. With an exact line height it
+    reserves room for the font's descent below the baseline and clips the image's top by that
+    much, so the line is "at least" the image height instead (it grows, never clips), and a
+    1px font keeps that descent from adding a visible gap.
+    """
+    return (f"height:{height}px;font-size:1px;line-height:{height}px;mso-line-height-rule:at-least;"
+            "vertical-align:top;")
+
+
 def e(value: str | None) -> str:
     """HTML-escape any user-provided value (text or attribute)."""
     return html.escape(value or "", quote=True)

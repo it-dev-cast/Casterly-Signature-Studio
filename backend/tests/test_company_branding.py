@@ -3,6 +3,7 @@ employee details (just above the banner), with only an on/off switch in Settings
 import re
 
 from app import branding
+from app.renderers.html_utils import image_cell
 from tests.conftest import create_banner, publish
 
 SETTINGS = {"company_name": "Casterly Private Limited", "company_website": None, "legal_disclaimer": None}
@@ -47,10 +48,12 @@ def test_logo_sits_right_aligned_just_above_the_banner(client, admin_headers, te
     assert logo_tag in html
     # In a fixed 50x50 box, top-right of the details row...
     assert (f'<td valign="top" align="right" width="50" height="50" '
-            f'style="padding:0;width:50px;height:50px;line-height:{h}px;mso-line-height-rule:exactly;">{logo_tag}') in html
-    assert html.index('<td valign="top" align="right" width="50" style="padding:0;width:50px;">') < html.index(logo_tag)
-    # ...and that row is immediately followed by the banner row.
-    assert re.search(re.escape(logo_tag) + r'[^<]*</td></tr></table></td></tr><tr><td colspan="\d" [^>]*><table[^>]*><tr><td[^>]*><a[^>]*><img src="[^"]*launch\.png"', html)
+            f'style="padding:0;width:50px;{image_cell(50)}">{logo_tag}') in html
+    assert html.index('<td valign="top" align="right" width="50" style="padding:0;width:50px;background-color:#ffffff;">') < html.index(logo_tag)
+    # ...and that row is followed by the banner row (after only the 8px spacer row above the banner).
+    assert re.search(re.escape(logo_tag) + r'[^<]*</td></tr></table></td></tr>'
+                     r'<tr><td colspan="\d" height="8" [^>]*>&nbsp;</td></tr>'
+                     r'<tr><td colspan="\d" [^>]*><table[^>]*><tr><td[^>]*><a[^>]*><img src="[^"]*launch\.png"', html)
     # The signature is banner-wide, so the logo lines up with the banner's right edge.
     assert html.startswith('<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="480"')
 
@@ -67,7 +70,7 @@ def test_logo_above_banner_in_minimal_layout(client, db, admin_headers, john):
     logo_at, banner_at = html.index(LOGO_SRC), html.index("launch.png")
     assert logo_at < banner_at
     h = branding.logo_display_size()[1]
-    assert (f'<td align="right" style="padding:6px 0 0 0;line-height:{h}px;mso-line-height-rule:exactly;">'
+    assert (f'<td align="right" style="padding:6px 0 0 0;{image_cell(h)}">'
             f'<img src="{LOGO_SRC}"') in html
 
 

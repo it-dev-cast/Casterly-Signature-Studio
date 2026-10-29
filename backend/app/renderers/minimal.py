@@ -1,7 +1,7 @@
 """Minimal layout: text-only, compact contact line; banner below."""
 from app.renderers.banner import BANNER_WIDTH, render_banner_html
 from app.renderers.context import SignatureContext
-from app.renderers.html_utils import EXACT, TABLE_ATTRS, display_url, e, link, logo_img, tel_href
+from app.renderers.html_utils import EXACT, TABLE_ATTRS, display_url, e, image_cell, link, logo_img, tel_href
 
 TEXT = "#374151"
 
@@ -40,23 +40,29 @@ def render(ctx: SignatureContext) -> str:
         rows.append(address_row)
     if ctx.logo:
         # Right-aligned in a banner-wide table, directly above the banner.
-        # Its own line height: an inherited exact one would make Word clip the logo.
+        # Its own line height: an inherited exact one would make Word clip the logo (image_cell).
         rows.append(
-            f'<tr><td align="right" style="padding:6px 0 0 0;line-height:{ctx.logo.height}px;{EXACT}">'
+            f'<tr><td align="right" style="padding:6px 0 0 0;{image_cell(ctx.logo.height)}">'
             f"{logo_img(ctx.logo)}</td></tr>"
         )
     if ctx.banner:
+        # Its own unpadded row (the gap above is a spacer row), flush with the left edge.
         top = 6 if ctx.logo else 8
-        rows.append(f'<tr><td style="padding:{top}px 0 0 0;">{render_banner_html(ctx.banner)}</td></tr>')
+        rows.append(
+            f'<tr><td height="{top}" style="padding:0;height:{top}px;font-size:1px;line-height:{top}px;{EXACT}">'
+            "&nbsp;</td></tr>"
+        )
+        rows.append(f'<tr><td style="padding:0;">{render_banner_html(ctx.banner)}</td></tr>')
     if ctx.disclaimer:
         rows.append(
             f'<tr><td style="padding:6px 0 0 0;font-size:9px;line-height:12px;{EXACT}color:#9CA3AF;">'
             f"{e(ctx.disclaimer)}</td></tr>"
         )
-    width = f' width="{BANNER_WIDTH}"' if ctx.logo else ""
+    banner_wide = bool(ctx.logo or ctx.banner)
+    width = f' width="{BANNER_WIDTH}"' if banner_wide else ""
     # Classic Outlook ignores max-width, so the pixel width is the CSS width (as in classic.py).
     # No font-size/line-height here: every row sets its own, and Word would pass them to images.
-    width_css = f"width:{BANNER_WIDTH}px;max-width:100%;" if ctx.logo else ""
+    width_css = f"width:{BANNER_WIDTH}px;max-width:100%;" if banner_wide else ""
     return (
         f'<table {TABLE_ATTRS}{width} style="border-collapse:collapse;{width_css}font-family:{s.font_family};'
         f'color:{TEXT};">{"".join(rows)}</table>'

@@ -59,7 +59,7 @@ def employee_view(employee: Employee, app_settings: AppSettings | None) -> Emplo
         mobile=employee.mobile,
         website=employee.website or (app_settings.company_website if app_settings else None),
         address=", ".join(p.strip() for p in (employee.address or "").splitlines() if p.strip()) or None,
-        # A round PNG made on the server: classic Outlook ignores border-radius.
+        # A square PNG made on the server: classic Outlook can't crop or convert images itself.
         photo_src=resolve_public_url(signature_photo_path(employee.profile_photo_url)),
         socials=socials,
     )

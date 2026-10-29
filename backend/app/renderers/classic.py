@@ -7,11 +7,11 @@ Everything is nested tables with inline styles, so Outlook, Gmail and Microsoft 
 Classic Outlook for Windows renders with Word, so: every column has a fixed pixel width (it
 ignores max-width and lets a 100% cell squeeze its neighbours), gaps are spacer cells rather
 than padding (it may count padding inside the width), and image cells set their own line
-height (an inherited "exactly 15px" line clips a 64px photo to a 15px strip).
+height (an inherited "exactly 15px" line clips a 64px photo to a 15px strip; see image_cell).
 """
 from app.renderers.banner import BANNER_WIDTH, render_banner_html
 from app.renderers.context import SignatureContext
-from app.renderers.html_utils import EXACT, TABLE_ATTRS, display_url, e, link, logo_img, tel_href
+from app.renderers.html_utils import EXACT, TABLE_ATTRS, display_url, e, image_cell, link, logo_img, tel_href
 
 MUTED = "#6B7280"
 TEXT = "#374151"
@@ -19,6 +19,8 @@ PHOTO = 64
 PHOTO_GAP = 14  # between the photo and the details
 LOGO_BOX = 50  # the logo is fitted into a 50x50 slot at the top-right of the details
 LOGO_GAP = 12  # between the details and the logo
+BANNER_GAP = 8  # between the signature block and the banner
+WHITE = "background-color:#ffffff;"  # behind the signature block only, never around the banner
 LABEL = 16  # width of the P / E / W / A label column, so the values line up
 SEP = '<span style="color:#D1D5DB;">&nbsp;|&nbsp;</span>'
 # Addresses are capped at two lines. Outlook ignores max-height/overflow, so a longer one
@@ -45,7 +47,7 @@ def _contact(label: str, value: str, primary: str, *, size: int = 11, height: in
 
 def _spacer(width: int) -> str:
     return (
-        f'<td width="{width}" style="padding:0;width:{width}px;font-size:1px;line-height:1px;{EXACT}">'
+        f'<td width="{width}" style="padding:0;width:{width}px;font-size:1px;line-height:1px;{EXACT}{WHITE}">'
         "&nbsp;</td>"
     )
 
@@ -102,9 +104,10 @@ def render(ctx: SignatureContext) -> str:
 
     cells: list[str] = []
     if show_photo:
-        # A round PNG from the server (signature_photo), so no border-radius is needed.
+        # A square PNG from the server (signature_photo): the whole photo, fitted and sized.
         cells.append(
-            f'<td valign="top" width="{PHOTO}" style="padding:0;width:{PHOTO}px;line-height:{PHOTO}px;{EXACT}">'
+            f'<td valign="top" width="{PHOTO}" height="{PHOTO}" '
+            f'style="padding:0;width:{PHOTO}px;{image_cell(PHOTO)}{WHITE}">'
             f'<img src="{e(emp.photo_src)}" alt="{e(emp.name)}" width="{PHOTO}" height="{PHOTO}" '
             f'style="display:block;width:{PHOTO}px;height:{PHOTO}px;border:0;outline:none;" />'
             "</td>"
@@ -115,38 +118,44 @@ def render(ctx: SignatureContext) -> str:
         # the top-right corner, in line with the banner's right edge.
         details_width = BANNER_WIDTH - LOGO_GAP - LOGO_BOX - ((PHOTO + PHOTO_GAP) if show_photo else 0)
         cells.append(
-            f'<td valign="top" width="{details_width}" style="padding:0;width:{details_width}px;">{details}</td>'
+            f'<td valign="top" width="{details_width}" style="padding:0;width:{details_width}px;{WHITE}">{details}</td>'
         )
         cells.append(_spacer(LOGO_GAP))
         # A fixed 50x50 box (its own table, so no client can squeeze it); the logo is fitted
         # inside it with its aspect ratio kept and pinned to the top-right corner.
         cells.append(
-            f'<td valign="top" align="right" width="{LOGO_BOX}" style="padding:0;width:{LOGO_BOX}px;">'
+            f'<td valign="top" align="right" width="{LOGO_BOX}" style="padding:0;width:{LOGO_BOX}px;{WHITE}">'
             f'<table {TABLE_ATTRS} width="{LOGO_BOX}" style="border-collapse:collapse;width:{LOGO_BOX}px;">'
             f'<tr><td valign="top" align="right" width="{LOGO_BOX}" height="{LOGO_BOX}" '
-            f'style="padding:0;width:{LOGO_BOX}px;height:{LOGO_BOX}px;line-height:{ctx.logo.height}px;{EXACT}">'
+            f'style="padding:0;width:{LOGO_BOX}px;{image_cell(LOGO_BOX)}">'
             f"{logo_img(ctx.logo)}</td></tr></table></td>"
         )
     else:
-        cells.append(f'<td valign="top" style="padding:0 12px 0 0;">{details}</td>')
+        cells.append(f'<td valign="top" style="padding:0 12px 0 0;{WHITE}">{details}</td>')
     colspan = len(cells)
 
     body = [f"<tr>{''.join(cells)}</tr>"]
     if ctx.banner:
+        # Its own row with no padding or background, so its left edge lines up with the photo and
+        # it is exactly as wide as the signature; the gap above is a separate spacer row.
         body.append(
-            f'<tr><td colspan="{colspan}" style="padding:8px 0 0 0;">{render_banner_html(ctx.banner)}</td></tr>'
+            f'<tr><td colspan="{colspan}" height="{BANNER_GAP}" style="padding:0;height:{BANNER_GAP}px;'
+            f'font-size:1px;line-height:{BANNER_GAP}px;{EXACT}{WHITE}">&nbsp;</td></tr>'
         )
+        body.append(f'<tr><td colspan="{colspan}" style="padding:0;">{render_banner_html(ctx.banner)}</td></tr>')
     if ctx.disclaimer:
         body.append(
             f'<tr><td colspan="{colspan}" style="padding:6px 0 0 0;font-size:9px;line-height:12px;{EXACT}'
-            f'color:#9CA3AF;">{e(ctx.disclaimer)}</td></tr>'
+            f'color:#9CA3AF;{WHITE}">{e(ctx.disclaimer)}</td></tr>'
         )
 
     # No font-size/line-height here: Word would pass an exact line height down to the image cells.
     # Every text cell sets its own. max-width:100% lets web and mobile clients shrink the table.
-    width = f' width="{BANNER_WIDTH}"' if ctx.logo else ""
-    width_css = f"width:{BANNER_WIDTH}px;max-width:100%;" if ctx.logo else ""
+    # With a logo or a banner the signature is banner-wide, so the banner matches the block.
+    banner_wide = bool(ctx.logo or ctx.banner)
+    width = f' width="{BANNER_WIDTH}"' if banner_wide else ""
+    width_css = f"width:{BANNER_WIDTH}px;max-width:100%;" if banner_wide else ""
     return (
         f'<table {TABLE_ATTRS}{width} style="border-collapse:collapse;{width_css}font-family:{s.font_family};'
-        f'color:{TEXT};background-color:#ffffff;">{"".join(body)}</table>'
+        f'color:{TEXT};">{"".join(body)}</table>'
     )
