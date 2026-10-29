@@ -47,7 +47,7 @@ def test_logo_sits_right_aligned_just_above_the_banner(client, admin_headers, te
     assert logo_tag in html
     # In a fixed 50x50 box, top-right of the details row...
     assert (f'<td valign="top" align="right" width="50" height="50" '
-            f'style="padding:0;width:50px;height:50px;">{logo_tag}') in html
+            f'style="padding:0;width:50px;height:50px;line-height:{h}px;mso-line-height-rule:exactly;">{logo_tag}') in html
     assert html.index('<td valign="top" align="right" width="50" style="padding:0;width:50px;">') < html.index(logo_tag)
     # ...and that row is immediately followed by the banner row.
     assert re.search(re.escape(logo_tag) + r'[^<]*</td></tr></table></td></tr><tr><td colspan="\d" [^>]*><table[^>]*><tr><td[^>]*><a[^>]*><img src="[^"]*launch\.png"', html)
@@ -66,7 +66,9 @@ def test_logo_above_banner_in_minimal_layout(client, db, admin_headers, john):
     html = _html(client, admin_headers, john.id)
     logo_at, banner_at = html.index(LOGO_SRC), html.index("launch.png")
     assert logo_at < banner_at
-    assert f'<td align="right" style="padding:6px 0 0 0;"><img src="{LOGO_SRC}"' in html
+    h = branding.logo_display_size()[1]
+    assert (f'<td align="right" style="padding:6px 0 0 0;line-height:{h}px;mso-line-height-rule:exactly;">'
+            f'<img src="{LOGO_SRC}"') in html
 
 
 def test_logo_shown_even_without_a_banner(client, admin_headers, template, john):

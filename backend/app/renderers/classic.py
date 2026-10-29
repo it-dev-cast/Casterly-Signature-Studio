@@ -3,6 +3,11 @@
 Kept compact so a pasted signature takes little room in the email: small type, tight
 line heights (enforced in Outlook with mso-line-height-rule) and one short line per contact.
 Everything is nested tables with inline styles, so Outlook, Gmail and Microsoft 365 agree.
+
+Classic Outlook for Windows renders with Word, so: every column has a fixed pixel width (it
+ignores max-width and lets a 100% cell squeeze its neighbours), gaps are spacer cells rather
+than padding (it may count padding inside the width), and image cells set their own line
+height (an inherited "exactly 15px" line clips a 64px photo to a 15px strip).
 """
 from app.renderers.banner import BANNER_WIDTH, render_banner_html
 from app.renderers.context import SignatureContext
@@ -11,7 +16,9 @@ from app.renderers.html_utils import EXACT, TABLE_ATTRS, display_url, e, link, l
 MUTED = "#6B7280"
 TEXT = "#374151"
 PHOTO = 64
+PHOTO_GAP = 14  # between the photo and the details
 LOGO_BOX = 50  # the logo is fitted into a 50x50 slot at the top-right of the details
+LOGO_GAP = 12  # between the details and the logo
 LABEL = 16  # width of the P / E / W / A label column, so the values line up
 SEP = '<span style="color:#D1D5DB;">&nbsp;|&nbsp;</span>'
 # Addresses are capped at two lines. Outlook ignores max-height/overflow, so a longer one
@@ -33,6 +40,13 @@ def _contact(label: str, value: str, primary: str, *, size: int = 11, height: in
         f'line-height:{height}px;{EXACT}font-weight:bold;color:{primary};">{label}&nbsp;</td>'
         f'<td valign="top" style="padding:0;font-size:{size}px;line-height:{height}px;{EXACT}color:{color};">'
         f"{value}</td></tr>"
+    )
+
+
+def _spacer(width: int) -> str:
+    return (
+        f'<td width="{width}" style="padding:0;width:{width}px;font-size:1px;line-height:1px;{EXACT}">'
+        "&nbsp;</td>"
     )
 
 
@@ -68,7 +82,7 @@ def render(ctx: SignatureContext) -> str:
         contacts.append(_contact("W", link(emp.website, display_url(emp.website), link_style), s.primary_color))
     if emp.address:
         # One step smaller and softer than the contacts, so it reads as secondary detail.
-        column = BANNER_WIDTH - LOGO_BOX - 12 - LABEL - ((PHOTO + 14) if show_photo else 0)
+        column = BANNER_WIDTH - LOGO_BOX - LOGO_GAP - LABEL - ((PHOTO + PHOTO_GAP) if show_photo else 0)
         address = _fit(emp.address, int(2 * column / ADDRESS_CHAR_PX))
         contacts.append(_contact("A", e(address), s.primary_color, size=10, height=13, color=MUTED))
     if contacts:
@@ -88,25 +102,33 @@ def render(ctx: SignatureContext) -> str:
 
     cells: list[str] = []
     if show_photo:
+        # A round PNG from the server (signature_photo), so no border-radius is needed.
         cells.append(
-            f'<td valign="top" width="{PHOTO}" style="padding:0 14px 0 0;width:{PHOTO}px;">'
+            f'<td valign="top" width="{PHOTO}" style="padding:0;width:{PHOTO}px;line-height:{PHOTO}px;{EXACT}">'
             f'<img src="{e(emp.photo_src)}" alt="{e(emp.name)}" width="{PHOTO}" height="{PHOTO}" '
-            f'style="display:block;width:{PHOTO}px;height:{PHOTO}px;border:0;border-radius:{PHOTO // 2}px;" />'
+            f'style="display:block;width:{PHOTO}px;height:{PHOTO}px;border:0;outline:none;" />'
             "</td>"
         )
-    # With a logo, the details column takes the free space so the logo sits in the top-right
-    # corner; the table is banner-wide so the logo lines up with the banner's right edge.
-    grow = ' width="100%"' if ctx.logo else ""
-    cells.append(f'<td valign="top"{grow} style="padding:0 12px 0 0;">{details}</td>')
+        cells.append(_spacer(PHOTO_GAP))
     if ctx.logo:
+        # The details column takes exactly what is left of the banner width, so the logo sits in
+        # the top-right corner, in line with the banner's right edge.
+        details_width = BANNER_WIDTH - LOGO_GAP - LOGO_BOX - ((PHOTO + PHOTO_GAP) if show_photo else 0)
+        cells.append(
+            f'<td valign="top" width="{details_width}" style="padding:0;width:{details_width}px;">{details}</td>'
+        )
+        cells.append(_spacer(LOGO_GAP))
         # A fixed 50x50 box (its own table, so no client can squeeze it); the logo is fitted
         # inside it with its aspect ratio kept and pinned to the top-right corner.
         cells.append(
             f'<td valign="top" align="right" width="{LOGO_BOX}" style="padding:0;width:{LOGO_BOX}px;">'
             f'<table {TABLE_ATTRS} width="{LOGO_BOX}" style="border-collapse:collapse;width:{LOGO_BOX}px;">'
             f'<tr><td valign="top" align="right" width="{LOGO_BOX}" height="{LOGO_BOX}" '
-            f'style="padding:0;width:{LOGO_BOX}px;height:{LOGO_BOX}px;">{logo_img(ctx.logo)}</td></tr></table></td>'
+            f'style="padding:0;width:{LOGO_BOX}px;height:{LOGO_BOX}px;line-height:{ctx.logo.height}px;{EXACT}">'
+            f"{logo_img(ctx.logo)}</td></tr></table></td>"
         )
+    else:
+        cells.append(f'<td valign="top" style="padding:0 12px 0 0;">{details}</td>')
     colspan = len(cells)
 
     body = [f"<tr>{''.join(cells)}</tr>"]
@@ -120,9 +142,11 @@ def render(ctx: SignatureContext) -> str:
             f'color:#9CA3AF;">{e(ctx.disclaimer)}</td></tr>'
         )
 
+    # No font-size/line-height here: Word would pass an exact line height down to the image cells.
+    # Every text cell sets its own. max-width:100% lets web and mobile clients shrink the table.
     width = f' width="{BANNER_WIDTH}"' if ctx.logo else ""
-    width_css = f"width:100%;max-width:{BANNER_WIDTH}px;" if ctx.logo else ""
+    width_css = f"width:{BANNER_WIDTH}px;max-width:100%;" if ctx.logo else ""
     return (
         f'<table {TABLE_ATTRS}{width} style="border-collapse:collapse;{width_css}font-family:{s.font_family};'
-        f'color:{TEXT};font-size:12px;line-height:15px;{EXACT}background-color:#ffffff;">{"".join(body)}</table>'
+        f'color:{TEXT};background-color:#ffffff;">{"".join(body)}</table>'
     )

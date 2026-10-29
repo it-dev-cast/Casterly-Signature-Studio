@@ -11,9 +11,12 @@ BANNER_WIDTH = 480  # compact: keeps the whole signature small in the email
 
 
 def render_banner_html(banner: BannerView, width: int = BANNER_WIDTH) -> str:
+    # Classic Outlook ignores max-width and sizes the image from the width/height attributes;
+    # every other client uses the CSS, so the banner still shrinks on narrow (mobile) screens.
+    height = f' height="{banner.height}"' if banner.height else ""
     img = (
         f'<img src="{e(banner.image_src)}" alt="{e(banner.title)}" title="{e(banner.title)}" '
-        f'width="{width}" style="display:block;width:100%;max-width:{width}px;height:auto;'
+        f'width="{width}"{height} style="display:block;width:{width}px;max-width:100%;height:auto;'
         f'border:0;outline:none;text-decoration:none;" />'
     )
     if banner.target_url:
@@ -23,6 +26,6 @@ def render_banner_html(banner: BannerView, width: int = BANNER_WIDTH) -> str:
         )
     return (
         f'<table {TABLE_ATTRS} width="{width}" '
-        f'style="border-collapse:collapse;width:100%;max-width:{width}px;">'
+        f'style="border-collapse:collapse;width:{width}px;max-width:100%;">'
         f'<tr><td style="padding:0;">{img}</td></tr></table>'
     )

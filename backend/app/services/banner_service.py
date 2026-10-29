@@ -1,6 +1,7 @@
 """Banner lifecycle and THE single source of truth for the current company banner."""
 from datetime import datetime
 
+from PIL import Image, UnidentifiedImageError
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -8,10 +9,11 @@ from sqlalchemy.orm import Session
 from app.core.errors import AppError, bad_request, conflict, not_found
 from app.database.models import AuditAction, Banner, BannerStatus, User
 from app.database.types import utcnow
-from app.renderers.banner import render_banner_html
+from app.renderers.banner import BANNER_WIDTH, render_banner_html
 from app.renderers.context import BannerView
 from app.schemas.banner import BannerCreate, BannerFields, BannerUpdate
 from app.services import audit_service
+from app.services.storage_service import get_storage
 from app.utils.urls import resolve_public_url
 
 
@@ -47,6 +49,25 @@ def effective_status(banner: Banner, now: datetime | None = None) -> BannerStatu
 
 
 # ------------------------------ rendering --------------------------------- #
+BLANK_BANNER_SIZE = (1200, 2)  # what /banner/current.png serves while no banner is published
+
+
+def display_height(banner: Banner | None, width: int = BANNER_WIDTH) -> int | None:
+    """Height in px of this banner shown `width` px wide, or None if its size can't be read."""
+    if banner is None:
+        w, h = BLANK_BANNER_SIZE
+    else:
+        local = get_storage().local_file(banner.image_url)
+        if local is None:
+            return None  # hosted elsewhere
+        try:
+            with Image.open(local) as img:
+                w, h = img.size
+        except (UnidentifiedImageError, OSError):
+            return None
+    return max(1, round(width * h / w))
+
+
 def banner_view(banner: Banner | BannerFields) -> BannerView:
     return BannerView(
         title=banner.title,

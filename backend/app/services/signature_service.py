@@ -18,6 +18,7 @@ from app.renderers import render_layout
 from app.renderers.context import BannerView, EmployeeView, LogoView, SignatureContext, TemplateStyle
 from app.renderers.html_utils import e
 from app.services import banner_service, employee_service, settings_service, template_service
+from app.services.signature_photo import signature_photo_path
 from app.utils.urls import resolve_public_url
 
 
@@ -58,7 +59,8 @@ def employee_view(employee: Employee, app_settings: AppSettings | None) -> Emplo
         mobile=employee.mobile,
         website=employee.website or (app_settings.company_website if app_settings else None),
         address=", ".join(p.strip() for p in (employee.address or "").splitlines() if p.strip()) or None,
-        photo_src=resolve_public_url(employee.profile_photo_url),
+        # A round PNG made on the server: classic Outlook ignores border-radius.
+        photo_src=resolve_public_url(signature_photo_path(employee.profile_photo_url)),
         socials=socials,
     )
 
@@ -88,7 +90,9 @@ def banner_version(banner: Banner | None) -> str:
     return f"{banner.id}-{int(banner.updated_at.timestamp() * 1_000_000)}"
 
 
-def live_banner_view(app_settings: AppSettings | None, version: str | None = None) -> BannerView:
+def live_banner_view(
+    app_settings: AppSettings | None, version: str | None = None, height: int | None = None
+) -> BannerView:
     """Banner that points at the live addresses instead of one specific banner.
 
     Used for signatures pasted or installed into Outlook: whatever banner is published at
@@ -98,12 +102,15 @@ def live_banner_view(app_settings: AppSettings | None, version: str | None = Non
     image proxy cache images by URL and ignore no-cache, so a fixed URL keeps showing the old
     banner; a new URL per banner is fetched fresh. The endpoints ignore the parameter, so an
     email sent with an older version still shows the current banner once its cache expires.
+
+    `height` is only safe with `version`: a plain address can later serve a banner of another shape.
     """
     query = f"?v={version}" if version else ""
     return BannerView(
         title=app_settings.company_name if app_settings else "Company banner",
         image_src=(resolve_public_url(LIVE_BANNER_IMAGE) or "") + query,
         target_url=resolve_public_url(LIVE_BANNER_LINK) + query,
+        height=height,
     )
 
 
@@ -117,7 +124,11 @@ def render_signature_html(
     versioned_banner: bool = False,
 ) -> str:
     if live_banner:
-        banner_view = live_banner_view(app_settings, banner_version(banner) if versioned_banner else None)
+        if versioned_banner:
+            # Built fresh for every email, so the current banner's height is right for it.
+            banner_view = live_banner_view(app_settings, banner_version(banner), banner_service.display_height(banner))
+        else:
+            banner_view = live_banner_view(app_settings)
     else:
         banner_view = banner_service.banner_view(banner) if banner else None
     ctx = SignatureContext(

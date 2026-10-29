@@ -22,6 +22,9 @@ class BannerView:
     title: str
     image_src: str  # absolute http(s) URL
     target_url: str | None = None
+    # Displayed height in px at the banner width. Classic Outlook needs it to size the image;
+    # left out when the image behind image_src can change shape (saved live signatures).
+    height: int | None = None
 
 
 @dataclass(frozen=True)

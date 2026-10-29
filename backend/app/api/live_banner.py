@@ -29,9 +29,19 @@ NO_STORE = {"Cache-Control": "no-cache, max-age=0, must-revalidate"}
 
 @lru_cache
 def _blank_png() -> bytes:
-    # 1200x2 transparent: at the signature's 600px width it collapses to a 1px strip.
+    # Transparent and very wide: at the signature's width it collapses to a 1px strip.
     buf = io.BytesIO()
-    Image.new("RGBA", (1200, 2), (255, 255, 255, 0)).save(buf, format="PNG")
+    Image.new("RGBA", banner_service.BLANK_BANNER_SIZE, (255, 255, 255, 0)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+@lru_cache(maxsize=8)
+def _as_png(path: str, mtime_ns: int) -> bytes:
+    """A WebP or GIF banner converted to PNG (classic Outlook can't show WebP). Cached per file
+    version, since this address is loaded for every email opened."""
+    with Image.open(path) as img:
+        buf = io.BytesIO()
+        img.convert("RGBA").save(buf, format="PNG", optimize=True)
     return buf.getvalue()
 
 
@@ -43,7 +53,10 @@ def current_banner_image(db: Session = Depends(get_db)):
     etag = f'"banner-{banner.id}-{int(banner.updated_at.timestamp())}"'
     local = get_storage().local_file(banner.image_url)
     if local is not None:
-        return FileResponse(local, headers={**NO_STORE, "ETag": etag})
+        if local.suffix.lower() in (".png", ".jpg", ".jpeg"):
+            return FileResponse(local, headers={**NO_STORE, "ETag": etag})
+        png = _as_png(str(local), local.stat().st_mtime_ns)
+        return Response(png, media_type="image/png", headers={**NO_STORE, "ETag": etag})
     # Externally hosted image: send the client there.
     return RedirectResponse(banner.image_url, status_code=302, headers=NO_STORE)
 

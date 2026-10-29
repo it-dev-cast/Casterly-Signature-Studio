@@ -40,7 +40,11 @@ def render(ctx: SignatureContext) -> str:
         rows.append(address_row)
     if ctx.logo:
         # Right-aligned in a banner-wide table, directly above the banner.
-        rows.append(f'<tr><td align="right" style="padding:6px 0 0 0;">{logo_img(ctx.logo)}</td></tr>')
+        # Its own line height: an inherited exact one would make Word clip the logo.
+        rows.append(
+            f'<tr><td align="right" style="padding:6px 0 0 0;line-height:{ctx.logo.height}px;{EXACT}">'
+            f"{logo_img(ctx.logo)}</td></tr>"
+        )
     if ctx.banner:
         top = 6 if ctx.logo else 8
         rows.append(f'<tr><td style="padding:{top}px 0 0 0;">{render_banner_html(ctx.banner)}</td></tr>')
@@ -50,8 +54,10 @@ def render(ctx: SignatureContext) -> str:
             f"{e(ctx.disclaimer)}</td></tr>"
         )
     width = f' width="{BANNER_WIDTH}"' if ctx.logo else ""
-    width_css = f"width:100%;max-width:{BANNER_WIDTH}px;" if ctx.logo else ""
+    # Classic Outlook ignores max-width, so the pixel width is the CSS width (as in classic.py).
+    # No font-size/line-height here: every row sets its own, and Word would pass them to images.
+    width_css = f"width:{BANNER_WIDTH}px;max-width:100%;" if ctx.logo else ""
     return (
         f'<table {TABLE_ATTRS}{width} style="border-collapse:collapse;{width_css}font-family:{s.font_family};'
-        f'color:{TEXT};font-size:12px;line-height:15px;{EXACT}">{"".join(rows)}</table>'
+        f'color:{TEXT};">{"".join(rows)}</table>'
     )
