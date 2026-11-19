@@ -1,7 +1,6 @@
 """Banner lifecycle and THE single source of truth for the current company banner."""
 from datetime import datetime
 
-from PIL import Image, UnidentifiedImageError
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -13,7 +12,7 @@ from app.renderers.banner import BANNER_WIDTH, render_banner_html
 from app.renderers.context import BannerView
 from app.schemas.banner import BannerCreate, BannerFields, BannerUpdate
 from app.services import audit_service
-from app.services.storage_service import get_storage
+from app.services.storage_service import BANNER_SIZE, check_new_image_ref, image_size
 from app.utils.urls import resolve_public_url
 
 
@@ -57,22 +56,28 @@ def display_height(banner: Banner | None, width: int = BANNER_WIDTH) -> int | No
     if banner is None:
         w, h = BLANK_BANNER_SIZE
     else:
-        local = get_storage().local_file(banner.image_url)
-        if local is None:
-            return None  # hosted elsewhere
-        try:
-            with Image.open(local) as img:
-                w, h = img.size
-        except (UnidentifiedImageError, OSError):
-            return None
+        size = image_size(banner.image_url)
+        if size is None:
+            return None  # hosted elsewhere or unreadable
+        w, h = size
     return max(1, round(width * h / w))
 
 
+def meets_size_rule(image_url: str) -> bool | None:
+    """Is this banner image exactly BANNER_SIZE? None when it can't be read (hosted elsewhere)."""
+    size = image_size(image_url)
+    return None if size is None else size == BANNER_SIZE
+
+
 def banner_view(banner: Banner | BannerFields) -> BannerView:
+    # A fixed height only for a banner of the required size (960 x 240 shows at 480 x 120).
+    # Older banners of other sizes keep the automatic height, so they are never squashed.
+    height = BANNER_WIDTH * BANNER_SIZE[1] // BANNER_SIZE[0] if meets_size_rule(banner.image_url) else None
     return BannerView(
         title=banner.title,
         image_src=resolve_public_url(banner.image_url) or "",
         target_url=banner.target_url,
+        height=height,
     )
 
 
@@ -88,6 +93,8 @@ def to_read(banner: Banner, current_id: int | None, *, with_html: bool = False) 
         "description": banner.description,
         "image_url": banner.image_url,
         "image_public_url": resolve_public_url(banner.image_url) or "",
+        # False: an older banner that isn't 960 x 240 (shown as a badge so admins replace it).
+        "meets_size_rule": meets_size_rule(banner.image_url),
         "target_url": banner.target_url,
         "status": banner.status,
         "effective_status": effective_status(banner),
@@ -143,6 +150,7 @@ def get_published_row(db: Session) -> Banner | None:
 
 # ------------------------------- mutations -------------------------------- #
 def create_banner(db: Session, data: BannerCreate, actor: User) -> Banner:
+    check_new_image_ref(data.image_url, "banner")
     banner = Banner(**data.model_dump(), status=BannerStatus.DRAFT, created_by=actor.id)
     db.add(banner)
     db.flush()
@@ -159,6 +167,8 @@ def update_banner(db: Session, banner_id: int, data: BannerUpdate, actor: User) 
     banner = get_banner(db, banner_id)
     if banner.status == BannerStatus.ARCHIVED:
         raise conflict("BANNER_ARCHIVED", "Archived banners cannot be edited.")
+    if data.image_url != banner.image_url:  # an unchanged older image keeps working
+        check_new_image_ref(data.image_url, "banner")
     for name, value in data.model_dump().items():
         setattr(banner, name, value)
     audit_service.record(

@@ -7,10 +7,10 @@ import pytest
 from PIL import Image
 
 from app import installer
-from tests.conftest import create_banner, publish
+from tests.conftest import create_banner, legacy_banner, publish
 
 
-def _png(color=(200, 30, 30), size=(1200, 240)) -> bytes:
+def _png(color=(200, 30, 30), size=(960, 240)) -> bytes:
     buf = io.BytesIO()
     Image.new("RGB", size, color).save(buf, format="PNG")
     return buf.getvalue()
@@ -131,9 +131,10 @@ def test_live_banner_follows_publishing(client, admin_headers):
     assert Image.open(io.BytesIO(client.get("/banner/current.png").content)).size == (1200, 2)
 
 
-def test_live_banner_redirects_to_external_image(client, admin_headers):
-    a = create_banner(client, admin_headers, "Ext", image_url="https://cdn.example.com/banner.png")
-    publish(client, admin_headers, a["id"])
+def test_live_banner_redirects_to_external_image(client, db, admin, admin_headers):
+    # New banners can't link to other websites, but one saved before the rules still works.
+    a = legacy_banner(db, admin, "Ext", "https://cdn.example.com/banner.png")
+    publish(client, admin_headers, a.id)
     r = client.get("/banner/current.png", follow_redirects=False)
     assert r.status_code == 302 and r.headers["location"] == "https://cdn.example.com/banner.png"
 

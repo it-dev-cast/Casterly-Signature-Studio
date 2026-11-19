@@ -90,7 +90,7 @@ def test_update_template(client, admin_headers):
 # ----------------------------------------------------------------- uploads --
 def _png() -> bytes:
     buf = io.BytesIO()
-    Image.new("RGB", (60, 20), (10, 20, 30)).save(buf, format="PNG")
+    Image.new("RGB", (960, 240), (10, 20, 30)).save(buf, format="PNG")  # the required banner size
     return buf.getvalue()
 
 

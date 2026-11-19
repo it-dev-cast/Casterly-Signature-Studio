@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from tests.conftest import banner_payload, create_banner, current_banner, publish
+from tests.conftest import banner_payload, create_banner, current_banner, publish, stored_image
 
 
 def _iso(dt: datetime) -> str:
@@ -113,11 +113,11 @@ def test_archived_banner_cannot_be_published_or_edited(client, admin_headers):
 def test_edit_published_banner_updates_signatures_live(client, admin_headers, template, john):
     a = create_banner(client, admin_headers)
     publish(client, admin_headers, a["id"])
-    r = client.put(f"/api/banners/{a['id']}", json=banner_payload("A", image_url="https://cdn.example.com/new.png"),
-                   headers=admin_headers)
+    new_image = stored_image("banners/new.png", (960, 240))
+    r = client.put(f"/api/banners/{a['id']}", json=banner_payload("A", image_url=new_image), headers=admin_headers)
     assert r.status_code == 200 and r.json()["data"]["status"] == "PUBLISHED"
     html = client.get(f"/api/signatures/{john.id}", headers=admin_headers).json()["data"]["html"]
-    assert "https://cdn.example.com/new.png" in html
+    assert f"https://sig.test{new_image}" in html
 
 
 def test_delete_rules(client, admin_headers):
@@ -151,6 +151,7 @@ def test_preview_unsaved_banner_uses_shared_renderer(client, admin_headers):
         title=payload["title"],
         image_src="https://sig.test" + payload["image_url"],
         target_url=payload["target_url"],
+        height=120,  # a 960 x 240 banner has a fixed height
     ))
     assert r.json()["data"]["html"] == expected
 

@@ -3,6 +3,19 @@
  * harmless default so pages render; individual tests override what they need.
  */
 import { vi } from 'vitest'
+import type { UploadRules } from '../types/api'
+
+/** What GET /api/uploads/rules returns (the backend's rules; the frontend has no copy of its own). */
+export const UPLOAD_RULES: UploadRules = {
+  photo: {
+    max_kb: 300, formats: ['jpg', 'png'], exact_width: null, exact_height: null, min_width: 256, min_height: 256,
+    hint: 'At least 256 x 256 px. JPG or PNG, max 300 KB.',
+  },
+  banner: {
+    max_kb: 500, formats: ['jpg', 'png'], exact_width: 960, exact_height: 240, min_width: null, min_height: null,
+    hint: 'Must be exactly 960 x 240 px. JPG or PNG, max 500 KB.',
+  },
+}
 
 export function apiMockFactory() {
   const page = { items: [], total: 0, page: 1, page_size: 20 }
@@ -49,6 +62,6 @@ export function apiMockFactory() {
       get: vi.fn(),
       update: vi.fn(),
     },
-    uploadsApi: { image: vi.fn() },
+    uploadsApi: { image: vi.fn(), rules: vi.fn(async () => UPLOAD_RULES) },
   }
 }

@@ -222,7 +222,7 @@ export function EmployeeFormDialog({ employee, onClose, onSaved }: Props) {
               value={values.profile_photo_url}
               onChange={set('profile_photo_url')}
               error={errors.profile_photo_url}
-              hint={fromNexus ? 'A photo added in nexusAuth replaces this one.' : 'Square images work best (at least 176 × 176 px).'}
+              hint={fromNexus ? 'Square images work best. A photo added in nexusAuth replaces this one.' : 'Square images work best.'}
             />
           )}
         </FormSection>

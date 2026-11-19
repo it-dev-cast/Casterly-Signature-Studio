@@ -81,7 +81,7 @@ export interface EmployeeInput {
   email: string
   phone: string | null
   mobile: string | null
-  website: string | null
+  website: string | null
   profile_photo_url: string | null
   linkedin_url: string | null
   twitter_url: string | null
@@ -98,6 +98,8 @@ export interface Banner {
   description: string | null
   image_url: string
   image_public_url: string
+  /** false: an older image that isn't 960 x 240; null: hosted elsewhere, size unknown. */
+  meets_size_rule: boolean | null
   target_url: string | null
   status: BannerStatus
   effective_status: BannerStatus
@@ -247,3 +249,16 @@ export interface UploadResult {
   path: string
   url: string
 }
+
+/** What an upload must meet (GET /api/uploads/rules); the backend enforces the same rules. */
+export interface UploadRule {
+  max_kb: number
+  formats: string[]
+  exact_width: number | null
+  exact_height: number | null
+  min_width: number | null
+  min_height: number | null
+  hint: string
+}
+
+export type UploadRules = Record<'banner' | 'photo', UploadRule>

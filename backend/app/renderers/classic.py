@@ -1,4 +1,5 @@
-"""Classic layout: [photo] | name, designation, org, contact lines | 50x50 logo top-right; banner below.
+"""Classic layout: [photo] | name, designation, org, P/E/W lines | 50x50 logo top-right; banner below,
+then the address (at most two lines) under the banner, or under the contact lines when there is no banner.
 
 Kept compact so a pasted signature takes little room in the email: small type, tight
 line heights (enforced in Outlook with mso-line-height-rule) and one short line per contact.
@@ -21,12 +22,17 @@ LOGO_BOX = 50  # the logo is fitted into a 50x50 slot at the top-right of the de
 LOGO_GAP = 12  # between the details and the logo
 BANNER_GAP = 8  # between the signature block and the banner
 WHITE = "background-color:#ffffff;"  # behind the signature block only, never around the banner
-LABEL = 16  # width of the P / E / W / A label column, so the values line up
+LABEL = 16  # width of the P / M / E / W label column, so the values line up
 SEP = '<span style="color:#D1D5DB;">&nbsp;|&nbsp;</span>'
-# Addresses are capped at two lines. Outlook ignores max-height/overflow, so a longer one
-# (a custom "Other" address in nexusAuth) is shortened instead: ~5.4px per character at
-# 10px Arial across the address column. Both preset office addresses fit without shortening.
-ADDRESS_CHAR_PX = 5.4
+# The address: dark 11px text with no label. A long one wraps to a second line: at 11px Arial
+# the preset office addresses are 537px and 579px, so they take two lines of the 480px banner
+# width and are never shortened.
+ADDRESS_SIZE = 11
+ADDRESS_LINE = 15
+ADDRESS_GAP = 4  # between the banner (or the contact lines) and the address
+# Anything longer than two lines (a long custom "Other" address in nexusAuth) is shortened with
+# "…": Outlook ignores max-height/overflow. ~5.1px per character at 11px Arial.
+ADDRESS_CHAR_PX = 5.1
 
 
 def _line(content: str, *, size: int = 11, height: int = 15, top: int = 0, extra: str = "") -> str:
@@ -60,10 +66,16 @@ def _fit(text: str, max_chars: int) -> str:
     return cut + "…"
 
 
+def _address(address: str, width: int) -> str:
+    """The address text, kept within two lines of a `width` px column."""
+    return e(_fit(address, int(2 * width / ADDRESS_CHAR_PX)))
+
+
 def render(ctx: SignatureContext) -> str:
     emp, s = ctx.employee, ctx.style
     show_photo = bool(s.show_photo and emp.photo_src)
     link_style = f"color:{TEXT};text-decoration:none;"
+    address_style = f"font-size:{ADDRESS_SIZE}px;line-height:{ADDRESS_LINE}px;{EXACT}color:{TEXT};"
 
     rows: list[str] = [
         _line(e(emp.name), size=16, height=20, extra=f"font-weight:bold;color:{s.primary_color};"),
@@ -82,16 +94,16 @@ def render(ctx: SignatureContext) -> str:
         contacts.append(_contact("E", link(f"mailto:{emp.email}", emp.email, link_style), s.primary_color))
     if emp.website:
         contacts.append(_contact("W", link(emp.website, display_url(emp.website), link_style), s.primary_color))
-    if emp.address:
-        # One step smaller and softer than the contacts, so it reads as secondary detail.
-        column = BANNER_WIDTH - LOGO_BOX - LOGO_GAP - LABEL - ((PHOTO + PHOTO_GAP) if show_photo else 0)
-        address = _fit(emp.address, int(2 * column / ADDRESS_CHAR_PX))
-        contacts.append(_contact("A", e(address), s.primary_color, size=10, height=13, color=MUTED))
     if contacts:
         rows.append(
             f'<tr><td style="padding:6px 0 0 0;"><table {TABLE_ATTRS} style="border-collapse:collapse;">'
             f'{"".join(contacts)}</table></td></tr>'
         )
+    if emp.address and not ctx.banner:
+        # No banner to sit under: the address follows the contact lines, in the details column.
+        column = BANNER_WIDTH - ((PHOTO + PHOTO_GAP) if show_photo else 0) - (LOGO_BOX + LOGO_GAP if ctx.logo else 0)
+        rows.append(_line(_address(emp.address, column), size=ADDRESS_SIZE, height=ADDRESS_LINE,
+                          top=ADDRESS_GAP, extra=f"color:{TEXT};"))
 
     if s.show_social and emp.socials:
         links = SEP.join(
@@ -143,6 +155,17 @@ def render(ctx: SignatureContext) -> str:
             f'font-size:1px;line-height:{BANNER_GAP}px;{EXACT}{WHITE}">&nbsp;</td></tr>'
         )
         body.append(f'<tr><td colspan="{colspan}" style="padding:0;">{render_banner_html(ctx.banner)}</td></tr>')
+        if emp.address:
+            # Under the banner, left edge in line with it (no padding); the gap is a spacer row,
+            # as Word may count padding inside a fixed height.
+            body.append(
+                f'<tr><td colspan="{colspan}" height="{ADDRESS_GAP}" style="padding:0;height:{ADDRESS_GAP}px;'
+                f'font-size:1px;line-height:{ADDRESS_GAP}px;{EXACT}{WHITE}">&nbsp;</td></tr>'
+            )
+            body.append(
+                f'<tr><td colspan="{colspan}" style="padding:0;{address_style}{WHITE}">'
+                f"{_address(emp.address, BANNER_WIDTH)}</td></tr>"
+            )
     if ctx.disclaimer:
         body.append(
             f'<tr><td colspan="{colspan}" style="padding:6px 0 0 0;font-size:9px;line-height:12px;{EXACT}'

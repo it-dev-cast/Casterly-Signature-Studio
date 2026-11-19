@@ -216,7 +216,6 @@ export function BannerEditorDialog({ banner, published, onClose }: Props) {
               value={values.image_url}
               onChange={set('image_url')}
               error={errors.image_url}
-              hint="Recommended 1200 × 240 px (shown at 600 px wide). PNG, JPEG, GIF or WebP, max 5 MB."
             />
             <TextField
               label="Target URL"

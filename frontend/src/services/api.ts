@@ -20,6 +20,7 @@ import type {
   SignatureTemplate,
   TemplateInput,
   UploadResult,
+  UploadRules,
 } from '../types/api'
 import { request, requestFile } from './http'
 
@@ -138,4 +139,5 @@ export const uploadsApi = {
     form.append('kind', kind)
     return request<UploadResult>('/api/uploads', { method: 'POST', formData: form })
   },
+  rules: () => request<UploadRules>('/api/uploads/rules'),
 }

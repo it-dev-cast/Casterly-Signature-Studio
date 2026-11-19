@@ -50,6 +50,7 @@ export function makeBanner(overrides: Partial<BannerWithHtml> = {}): BannerWithH
     description: 'Thank you for being part of our journey.',
     image_url: '/uploads/banners/a.png',
     image_public_url: 'http://localhost:8000/uploads/banners/a.png',
+    meets_size_rule: true,
     target_url: 'https://example.com',
     status: 'DRAFT',
     effective_status: 'DRAFT',

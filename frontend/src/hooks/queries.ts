@@ -12,6 +12,7 @@ import {
   settingsApi,
   signaturesApi,
   templatesApi,
+  uploadsApi,
   type AuditParams,
   type EmployeeListParams,
 } from '../services/api'
@@ -34,6 +35,7 @@ export const keys = {
   audit: (p: AuditParams) => ['audit', p] as const,
   settings: ['settings'] as const,
   branding: ['branding'] as const,
+  uploadRules: ['uploadRules'] as const,
 }
 
 function invalidate(qc: QueryClient, ...roots: string[]) {
@@ -86,6 +88,9 @@ export const useMySignature = () => useQuery({ queryKey: keys.mySignature, query
 export const useTemplates = () => useQuery({ queryKey: keys.templates, queryFn: templatesApi.list })
 
 export const useLayouts = () => useQuery({ queryKey: keys.layouts, queryFn: templatesApi.layouts, staleTime: Infinity })
+
+/** What photo and banner uploads must meet; fixed per deployment. */
+export const useUploadRules = () => useQuery({ queryKey: keys.uploadRules, queryFn: uploadsApi.rules, staleTime: Infinity })
 
 export const useAuditLogs = (params: AuditParams) =>
   useQuery({ queryKey: keys.audit(params), queryFn: () => auditApi.list(params), placeholderData: keepPreviousData })

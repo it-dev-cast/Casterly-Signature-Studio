@@ -32,9 +32,10 @@ def data(r: httpx.Response):
     return body["data"]
 
 
-def banner_image(text: str, bg: tuple[int, int, int]) -> bytes:
-    img = Image.new("RGB", (1200, 240), bg)
-    ImageDraw.Draw(img).text((60, 90), text, fill=(255, 255, 255), font_size=56)
+def banner_image(text: str, bg: tuple[int, int, int], size: tuple[int, int]) -> bytes:
+    """A banner image of `size`, the required size read from GET /api/uploads/rules."""
+    img = Image.new("RGB", size, bg)
+    ImageDraw.Draw(img).text((size[1] // 5, size[1] * 3 // 8), text, fill=(255, 255, 255), font_size=size[1] // 5)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
@@ -65,6 +66,8 @@ def main() -> None:
     check(c.get("/api/health").status_code == 200, "backend is not reachable")
     login = data(c.post("/api/auth/login", json={"email": args.email, "password": args.password}))
     c.headers["Authorization"] = f"Bearer {login['access_token']}"
+    banner_rule = data(c.get("/api/uploads/rules"))["banner"]
+    banner_size = (banner_rule["exact_width"], banner_rule["exact_height"])
     step("Logged in as admin")
 
     # 4-5 overview + employees
@@ -87,7 +90,7 @@ def main() -> None:
     # 8-13 create Company Anniversary as draft
     data(c.get("/api/banners"))
     upload = data(c.post("/api/uploads", data={"kind": "banner"},
-                         files={"file": ("anniversary.png", banner_image("Celebrating 10 Years", (30, 58, 138)), "image/png")}))
+                         files={"file": ("anniversary.png", banner_image("Celebrating 10 Years", (30, 58, 138), banner_size), "image/png")}))
     step(f"Uploaded banner image -> {upload['url']}")
     anniversary_in = {
         "name": "Company Anniversary", "title": "Celebrating 10 Years",
@@ -118,7 +121,7 @@ def main() -> None:
 
     # 22-24 New Year Campaign
     ny_upload = data(c.post("/api/uploads", data={"kind": "banner"},
-                            files={"file": ("new-year.png", banner_image("Happy New Year 2027", (127, 29, 29)), "image/png")}))
+                            files={"file": ("new-year.png", banner_image("Happy New Year 2027", (127, 29, 29), banner_size), "image/png")}))
     new_year = data(c.post("/api/banners", json={
         "name": "New Year Campaign", "title": "Happy New Year 2027",
         "description": "Wishing you a successful year ahead.", "image_url": ny_upload["path"],

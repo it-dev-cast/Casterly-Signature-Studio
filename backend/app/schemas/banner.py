@@ -69,6 +69,7 @@ class BannerRead(ORMModel):
     description: str | None
     image_url: str
     image_public_url: str
+    meets_size_rule: bool | None = None  # False: an older image that isn't 960 x 240
     target_url: str | None
     status: BannerStatus
     effective_status: BannerStatus

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.database.database import get_db
 from app.public_app import app as public_app
-from tests.conftest import banner_payload, create_banner, publish
+from tests.conftest import banner_payload, create_banner, publish, stored_image
 
 NS = {"o": "http://schemas.microsoft.com/office/appforoffice/1.1"}
 VO = "{http://schemas.microsoft.com/office/mailappversionoverrides/1.1}"
@@ -175,7 +175,7 @@ def test_addin_banner_url_changes_with_every_banner_change(client, admin_headers
 
     # Editing the published banner (new image, same banner) also changes the URL.
     edit = client.put(f"/api/banners/{b['id']}", headers=admin_headers,
-                      json=banner_payload("Summer", image_url="/uploads/banners/summer-v2.png"))
+                      json=banner_payload("Summer", image_url=stored_image("banners/summer-v2.png", (960, 240))))
     assert edit.status_code == 200, edit.text
     edited_image, _ = _addin_banner_urls(client)
     assert edited_image != b_image and edited_image.startswith(f"https://sig.test/banner/current.png?v={b['id']}-")

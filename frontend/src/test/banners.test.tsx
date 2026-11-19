@@ -5,10 +5,13 @@ import * as api from '../services/api'
 import { adminUser, makeBanner, makeEmployee, makeSignature, renderApp, stripHtml } from './utils'
 
 vi.mock('../services/api', async () => (await import('./apiMock')).apiMockFactory())
+// jsdom can't decode images: the chosen file is "read" as the required banner size.
+vi.mock('../utils/imageSize', () => ({ readImageSize: vi.fn(async () => ({ width: 960, height: 240 })) }))
 const mocked = vi.mocked(api, true)
 
 beforeEach(() => {
   mocked.authApi.me.mockResolvedValue({ user: adminUser, employee: null })
+  mocked.uploadsApi.image.mockResolvedValue({ path: '/uploads/banners/a.png', url: 'https://sig.test/uploads/banners/a.png' })
 })
 
 function iframeHtml(container: HTMLElement): string {
@@ -29,7 +32,8 @@ describe('Banner creation & preview', () => {
     await user.type(d.getByLabelText(/banner name/i), 'Company Anniversary')
     await user.type(d.getByLabelText(/banner title/i), 'Celebrating 10 Years')
     await user.type(d.getByLabelText(/description/i), 'Thank you for being part of our journey.')
-    await user.type(d.getByLabelText(/hosted image url/i), '/uploads/banners/a.png')
+    await user.upload(d.getByLabelText('Upload Banner image'), new File(['png'], 'banner.png', { type: 'image/png' }))
+    await d.findByRole('button', { name: 'Replace image' })  // uploaded: the form now holds its path
   }
 
   it('requires name, title and image', async () => {

@@ -15,7 +15,7 @@ from app.renderers.classic import LOGO_BOX, LOGO_GAP, PHOTO, PHOTO_GAP
 from app.renderers.context import BannerView, EmployeeView, LogoView, SignatureContext, TemplateStyle
 from app.renderers.html_utils import image_cell
 from app.services.signature_photo import STYLE, signature_photo_path, square_photo_png
-from tests.conftest import create_banner, make_employee, publish
+from tests.conftest import create_banner, legacy_banner, make_employee, publish
 
 EMPLOYEE = EmployeeView(
     name="Pia Photo", designation="Designer", department="Design", company="Casterly",
@@ -234,9 +234,10 @@ def test_saved_signatures_have_no_fixed_banner_height(client, db, admin_headers,
     assert "banner/current.png" in live and 'height="120"' not in live
 
 
-def test_live_banner_is_always_png(client, admin_headers, template):
+def test_live_banner_is_always_png(client, db, admin, admin_headers, template):
+    # WebP can't be uploaded any more, but a WebP banner saved before the rules still works.
     image = _write_upload("banners/webp-banner.webp", _png((960, 240), fmt="WEBP"))
-    publish(client, admin_headers, create_banner(client, admin_headers, "Webp", image_url=image)["id"])
+    publish(client, admin_headers, legacy_banner(db, admin, "Webp", image).id)
     r = client.get("/banner/current.png")
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
     with Image.open(io.BytesIO(r.content)) as img:

@@ -5,19 +5,30 @@ import { ArchiveConfirmDialog, DeleteBannerDialog, PublishConfirmDialog, Unpubli
 import { BannerEditorDialog } from '../../components/banners/BannerEditorDialog'
 import { BannerPreview } from '../../components/banners/BannerPreview'
 import { CurrentBannerCard } from '../../components/banners/CurrentBannerCard'
-import { BannerStatusBadge } from '../../components/ui/Badge'
+import { Badge, BannerStatusBadge } from '../../components/ui/Badge'
 import { Button, IconButton } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { DetailList, PageHeader, Segmented, table } from '../../components/ui/Misc'
 import { Modal } from '../../components/ui/Modal'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States'
 import { useToast } from '../../components/ui/Toast'
-import { useBanner, useBannerMutations, useBanners } from '../../hooks/queries'
+import { useBanner, useBannerMutations, useBanners, useUploadRules } from '../../hooks/queries'
 import type { Banner } from '../../types/api'
 import { friendlyError } from '../../utils/errors'
 import { assetUrl, formatDate, formatDateTime } from '../../utils/format'
 
 type Filter = 'all' | 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+
+/** Marks an older banner whose image isn't the required size; the size comes from the upload rules. */
+function WrongSizeBadge() {
+  const rule = useUploadRules().data?.banner
+  const size = rule?.exact_width && rule.exact_height ? `${rule.exact_width} x ${rule.exact_height}` : null
+  return (
+    <span title={`Older image. New banners must be ${size ? `exactly ${size} px` : 'the required size'}; upload a new image to replace it.`}>
+      <Badge tone="amber">{size ? `Not ${size}` : 'Wrong size'}</Badge>
+    </span>
+  )
+}
 type Pending = { kind: 'publish' | 'unpublish' | 'archive' | 'delete'; banner: Banner } | null
 
 function BannerViewDialog({ bannerId, onClose }: { bannerId: number; onClose: () => void }) {
@@ -199,7 +210,10 @@ export function BannersPage() {
                         </div>
                       </td>
                       <td className={table.td}>
-                        <BannerStatusBadge status={b.effective_status} />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <BannerStatusBadge status={b.effective_status} />
+                          {b.meets_size_rule === false && <WrongSizeBadge />}
+                        </div>
                       </td>
                       <td className={`${table.td} hidden whitespace-nowrap md:table-cell`}>{formatDate(b.created_at)}</td>
                       <td className={`${table.td} hidden whitespace-nowrap md:table-cell`}>{formatDate(b.published_at)}</td>

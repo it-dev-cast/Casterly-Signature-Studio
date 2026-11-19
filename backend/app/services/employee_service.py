@@ -6,6 +6,7 @@ from app.core.security import hash_password
 from app.database.models import AuditAction, Employee, OutlookAddinStatus, User, UserRole
 from app.schemas.employee import EmployeeCreate, EmployeeUpdate
 from app.services import audit_service
+from app.services.storage_service import check_new_image_ref
 
 _PROFILE_FIELDS = [
     "employee_code", "first_name", "last_name", "display_name", "designation", "department",
@@ -110,6 +111,8 @@ def _sync_login(db: Session, employee: Employee, password: str | None) -> None:
 
 def create_employee(db: Session, data: EmployeeCreate, actor: User) -> Employee:
     _ensure_unique(db, data)
+    if data.profile_photo_url:
+        check_new_image_ref(data.profile_photo_url, "photo")
     employee = Employee(**data.model_dump(include=set(_PROFILE_FIELDS)))
     db.add(employee)
     db.flush()
@@ -145,6 +148,9 @@ def update_employee(db: Session, employee_id: int, data: EmployeeUpdate, actor: 
     _ensure_unique(db, data, exclude_id=employee.id)
     if employee.user_id == actor.id and not data.is_active:
         raise bad_request("CANNOT_DEACTIVATE_SELF", "You cannot deactivate your own account.")
+    # Only a new photo is checked: an older one (or one from nexusAuth) keeps working.
+    if data.profile_photo_url and data.profile_photo_url != employee.profile_photo_url:
+        check_new_image_ref(data.profile_photo_url, "photo")
     was_active = employee.is_active
     for name, value in data.model_dump(include=set(_PROFILE_FIELDS)).items():
         setattr(employee, name, value)

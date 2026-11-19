@@ -154,16 +154,44 @@ def john_headers(client, john) -> dict:
     return login(client, john.email, EMPLOYEE_PASSWORD)
 
 
+def image_bytes(size: tuple[int, int], fmt: str = "PNG", color=(30, 58, 138)) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", size, color).save(buf, format=fmt)
+    return buf.getvalue()
+
+
+def stored_image(key: str, size: tuple[int, int], fmt: str = "PNG", color=(30, 58, 138)) -> str:
+    """Write an image straight into the uploads folder (like an older upload) and return its path."""
+    target = Path(_UPLOADS) / key
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(image_bytes(size, fmt, color))
+    return f"/uploads/{key}"
+
+
 def banner_payload(name: str = "Banner A", **overrides) -> dict:
     data = {
         "name": name,
         "title": f"{name} title",
         "description": "Test banner",
-        "image_url": f"/uploads/banners/{name.lower().replace(' ', '-')}.png",
         "target_url": "https://example.com/campaign",
     }
     data.update(overrides)
+    if "image_url" not in data:  # a stored image of the required size, as an upload makes
+        data["image_url"] = stored_image(f"banners/{name.lower().replace(' ', '-')}.png", (960, 240))
     return data
+
+
+def legacy_banner(db, admin: User, name: str, image_url: str, **extra) -> models.Banner:
+    """A banner saved before the upload rules existed (e.g. another size, or an external link)."""
+    banner = models.Banner(name=name, title=f"{name} title", image_url=image_url,
+                           status=models.BannerStatus.DRAFT, created_by=admin.id, **extra)
+    db.add(banner)
+    db.commit()
+    return banner
 
 
 def create_banner(client, headers, name: str = "Banner A", **overrides) -> dict:

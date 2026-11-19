@@ -1,8 +1,10 @@
 import { ImagePlus, Trash2 } from 'lucide-react'
-import { useId, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { useUploadRules } from '../../hooks/queries'
 import { uploadsApi, type UploadKind } from '../../services/api'
 import { friendlyError } from '../../utils/errors'
 import { assetUrl } from '../../utils/format'
+import { checkImageFile } from '../../utils/imageFile'
 import { Button } from '../ui/Button'
 
 interface ImageUploadProps {
@@ -15,26 +17,33 @@ interface ImageUploadProps {
   hint?: string
 }
 
-const MAX_MB = 5
-
 const frameClass: Record<UploadKind, string> = {
   banner: 'h-16 w-full rounded-md sm:w-64',
   photo: 'h-16 w-16 rounded-full',
 }
 
-/** Upload an image to the backend (or paste a hosted image URL). Stores the returned path/URL. */
+const kindLabel: Record<UploadKind, string> = { banner: 'Banner', photo: 'Photo' }
+
+/**
+ * Upload an image to the backend and store the returned path. The file is checked against the
+ * upload rules first, so a wrong size or type shows at once; the backend enforces the same rules.
+ * An existing image (including an older hosted URL) is shown and kept until it is replaced.
+ */
 export function ImageUpload({ label, kind, value, onChange, error, required, hint }: ImageUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const urlId = useId()
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const rule = useUploadRules().data?.[kind]
   const preview = assetUrl(value)
 
   async function handleFile(file: File | undefined) {
     if (!file) return
     setUploadError(null)
-    if (!file.type.startsWith('image/')) return setUploadError('Please choose an image file (PNG, JPEG, GIF or WebP).')
-    if (file.size > MAX_MB * 1024 * 1024) return setUploadError(`Images must be smaller than ${MAX_MB} MB.`)
+    const problem = rule ? await checkImageFile(file, rule, kindLabel[kind]) : null
+    if (problem) {
+      if (inputRef.current) inputRef.current.value = ''
+      return setUploadError(problem)
+    }
     setUploading(true)
     try {
       const result = await uploadsApi.image(file, kind)
@@ -67,7 +76,7 @@ export function ImageUpload({ label, kind, value, onChange, error, required, hin
             <input
               ref={inputRef}
               type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp"
+              accept="image/png,image/jpeg"
               className="hidden"
               aria-label={`Upload ${label}`}
               onChange={(e) => handleFile(e.target.files?.[0])}
@@ -82,22 +91,11 @@ export function ImageUpload({ label, kind, value, onChange, error, required, hin
             )}
           </div>
         </div>
-        <label htmlFor={urlId} className="mt-3 block text-xs text-slate-500">
-          …or use a hosted image URL
-        </label>
-        <input
-          id={urlId}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="https://cdn.example.com/image.png"
-          className="mt-1 block h-9 w-full rounded-md border border-slate-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-        />
       </div>
-      {shownError ? (
-        <p className="mt-1.5 text-xs text-red-600">{shownError}</p>
-      ) : hint ? (
-        <p className="mt-1.5 text-xs text-slate-500">{hint}</p>
-      ) : null}
+      {shownError && <p className="mt-1.5 text-xs text-red-600">{shownError}</p>}
+      {(rule || hint) && (
+        <p className="mt-1.5 text-xs text-slate-500">{[rule?.hint, hint].filter(Boolean).join(' ')}</p>
+      )}
     </div>
   )
 }
